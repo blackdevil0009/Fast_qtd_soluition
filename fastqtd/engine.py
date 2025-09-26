@@ -160,12 +160,22 @@ def instant_revert(txn_id: str, requested_amount: float = None):
 def register_sim_txn(txn_id, from_acct, to_acct, amount):
     """Helper to register simulated ledger transaction (for demo and tracing)."""
     try:
+        # create the in-memory ledger entry
         register_simulated_txn(txn_id, from_acct, to_acct, amount)
-        # store a DB trace for the from_acct for later DB-driven tracing
-        add_trace(from_acct, [from_acct, to_acct])
+        # attempt to store a DB trace but don't crash the whole process if DB write fails
+        try:
+            add_trace(from_acct, [from_acct, to_acct])
+        except Exception as db_exc:
+            # don't call add_traceback here because DB may be the problem; write to stderr/log instead
+            print(f"Warning: add_trace failed (DB may be locked). Exception: {db_exc}")
         return {'txn_id': txn_id, 'registered': True}
     except Exception as e:
-        add_traceback('register_sim_txn', e)
+        # try to write a traceback — but guard against failing while writing tracebacks
+        try:
+            add_traceback('register_sim_txn', e)
+        except Exception:
+            # Emergency fallback
+            print("Critical: failed to write traceback for register_sim_txn:", e)
         raise
 
 def _txn_to_features(txn):
